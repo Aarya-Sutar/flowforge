@@ -6,17 +6,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
 from app.models.audit_log import AuditLog
-from app.models.request import Request, RequestStatus
+from app.models.request import ProcessingStatus, Request, RequestStatus
 from app.models.user import User, UserRole
 from app.models.workflow_task import WorkflowTask
 from app.schemas.audit_log import AuditLogRead
 from app.schemas.pagination import Page
 from app.schemas.request import RequestCreate, RequestRead, RequestUpdate
 from app.schemas.workflow_task import WorkflowTaskRead
-from app.services import request_service
+from app.services import audit_service, request_service
+from app.workers.tasks import process_request as process_request_task
 
 router = APIRouter(prefix="/api/requests", tags=["requests"])
 
@@ -47,13 +48,21 @@ def create_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Request:
-    return request_service.create_request(
+    request = request_service.create_request(
         db,
         requester=current_user,
         title=payload.title,
         description=payload.description,
         department=payload.department,
     )
+
+    # Enqueue only after the transaction above has committed — otherwise a worker
+    # could pick up the task and query for this request before the row is even
+    # visible in the database (the API would return quickly, but the task would
+    # immediately fail with "request not found").
+    process_request_task.delay(str(request.id))
+
+    return request
 
 
 @router.get("", response_model=Page[RequestRead])
@@ -142,6 +151,37 @@ def update_request(
         department=payload.department,
         status=payload.status,
     )
+
+
+@router.post("/{request_id}/retry", response_model=RequestRead)
+def retry_request(
+    request_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(require_roles(UserRole.OPERATOR, UserRole.ADMIN)),
+) -> Request:
+    request = _get_request_or_404(db, request_id)
+
+    if request.processing_status != ProcessingStatus.FAILED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Only FAILED requests can be retried (current processing_status: {request.processing_status.value})",
+        )
+
+    request.processing_status = ProcessingStatus.QUEUED
+    db.flush()
+    audit_service.record_event(
+        db,
+        request_id=request.id,
+        event_type="PROCESSING_RETRIED",
+        actor=_current_user.email,
+        description=f"Reprocessing manually triggered by {_current_user.email}",
+    )
+    db.commit()
+    db.refresh(request)
+
+    process_request_task.delay(str(request.id))
+
+    return request
 
 
 @router.get("/{request_id}/timeline", response_model=list[AuditLogRead])

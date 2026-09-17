@@ -42,7 +42,13 @@ def db_session() -> Generator[Session, None, None]:
 
 
 @pytest.fixture()
-def client(db_session: Session) -> Generator[TestClient, None, None]:
+def client(db_session: Session, monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]:
+    # Route handlers enqueue Celery tasks via `.delay(...)`, which otherwise tries
+    # to open a real connection to Redis. No broker runs in the test environment,
+    # so we replace `.delay` with a no-op — the worker pipeline itself is tested
+    # directly in test_processing_service.py, independent of Celery/HTTP entirely.
+    monkeypatch.setattr("app.workers.tasks.process_request.delay", lambda *args, **kwargs: None)
+
     def override_get_db() -> Generator[Session, None, None]:
         yield db_session
 

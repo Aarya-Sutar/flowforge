@@ -1,4 +1,8 @@
+import uuid
+
 from fastapi.testclient import TestClient
+
+from app.models.request import ProcessingStatus, Request
 
 
 def create_request(client: TestClient, headers: dict, title: str = "Cannot access repo", department: str = "Engineering"):
@@ -179,3 +183,47 @@ def test_request_tasks_endpoint_returns_empty_list_initially(
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_create_request_leaves_processing_status_queued(client: TestClient, user_a_headers: dict) -> None:
+    # process_request.delay is mocked to a no-op in tests (see conftest.py), so
+    # the pipeline never actually runs here — this only checks the state the API
+    # itself commits before handing off to the (mocked) queue.
+    created = create_request(client, user_a_headers).json()
+    assert created["processing_status"] == "QUEUED"
+
+
+def test_retry_rejected_when_not_failed(client: TestClient, user_a_headers: dict, admin_headers: dict) -> None:
+    created = create_request(client, user_a_headers).json()
+
+    response = client.post(f"/api/requests/{created['id']}/retry", headers=admin_headers)
+
+    assert response.status_code == 409
+
+
+def test_retry_rejected_for_regular_user(client: TestClient, user_a_headers: dict) -> None:
+    created = create_request(client, user_a_headers).json()
+
+    response = client.post(f"/api/requests/{created['id']}/retry", headers=user_a_headers)
+
+    assert response.status_code == 403
+
+
+def test_retry_requeues_a_failed_request(
+    client: TestClient, db_session, user_a_headers: dict, admin_headers: dict
+) -> None:
+    created = create_request(client, user_a_headers).json()
+    # processing_status isn't client-settable via the API (only the real
+    # pipeline sets it to FAILED) — set it directly to simulate that outcome.
+    request_row = db_session.get(Request, uuid.UUID(created["id"]))
+    request_row.processing_status = ProcessingStatus.FAILED
+    db_session.commit()
+
+    response = client.post(f"/api/requests/{created['id']}/retry", headers=admin_headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["processing_status"] == "QUEUED"
+
+    timeline = client.get(f"/api/requests/{created['id']}/timeline", headers=admin_headers).json()
+    assert any(event["event_type"] == "PROCESSING_RETRIED" for event in timeline)

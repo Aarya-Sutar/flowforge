@@ -4,7 +4,7 @@ Intelligent business process automation platform. A user submits a business requ
 
 This repository is being built in phases — see [`FLOWFORGE_SPEC.md`](FLOWFORGE_SPEC.md) for the full plan and [`docs/learning/`](docs/learning) for phase-by-phase explanations of how and why it's built this way.
 
-**Status: Phase 2 — Backend + Database Engineering** (relational schema, SQLAlchemy relationships, Alembic migrations, service layer, request CRUD with pagination/filtering/sorting, role-based authorization).
+**Status: Phase 3 — Asynchronous Processing** (Redis + Celery, background request processing, retries, idempotency).
 
 ## Quickstart (Docker Compose)
 
@@ -32,6 +32,13 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
+In a separate terminal, run the Celery worker (requires a local Redis instance — set `CELERY_BROKER_URL`/`CELERY_RESULT_BACKEND` in `.env` accordingly):
+
+```bash
+cd backend
+celery -A app.workers.celery_app worker --loglevel=info
+```
+
 Run tests:
 
 ```bash
@@ -57,8 +64,8 @@ flowforge/
 │   │   ├── core/      config, database session, security (JWT/hashing)
 │   │   ├── models/    SQLAlchemy ORM models
 │   │   ├── schemas/   Pydantic request/response schemas
-│   │   ├── services/  business logic (added from Phase 2 onward)
-│   │   ├── workers/   Celery tasks (added in Phase 3)
+│   │   ├── services/  business logic, including the async processing pipeline
+│   │   ├── workers/   Celery app + tasks (background request processing)
 │   │   └── rules/     deterministic rule engine (added in Phase 5)
 │   ├── alembic/       database migrations
 │   └── tests/         pytest suite
@@ -79,3 +86,4 @@ flowforge/
 - [`TEACHING_GUIDE.md`](TEACHING_GUIDE.md) — how it's being taught
 - [`docs/learning/PHASE_1_FOUNDATIONS.md`](docs/learning/PHASE_1_FOUNDATIONS.md) — Phase 1 deep dive
 - [`docs/learning/PHASE_2_BACKEND_DATABASE.md`](docs/learning/PHASE_2_BACKEND_DATABASE.md) — Phase 2 deep dive
+- [`docs/learning/PHASE_3_ASYNC_PROCESSING.md`](docs/learning/PHASE_3_ASYNC_PROCESSING.md) — Phase 3 deep dive

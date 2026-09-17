@@ -57,6 +57,10 @@ class Request(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     department: Mapped[str] = mapped_column(String(100), nullable=False)
+    # Whitespace-collapsed, trimmed version of `description`, written by the Celery
+    # worker's normalize stage (app/services/processing_service.py). Nullable because
+    # it doesn't exist until that stage has actually run.
+    normalized_description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     status: Mapped[RequestStatus] = mapped_column(
         Enum(RequestStatus, name="request_status"), nullable=False, default=RequestStatus.PENDING

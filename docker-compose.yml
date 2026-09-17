@@ -15,6 +15,16 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   backend:
     build:
       context: ./backend
@@ -22,13 +32,41 @@ services:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-flowforge}:${POSTGRES_PASSWORD:-flowforge}@postgres:5432/${POSTGRES_DB:-flowforge}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
       CORS_ORIGINS: '["http://localhost:3000"]'
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     ports:
       - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     command: >
       sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  celery-worker:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-flowforge}:${POSTGRES_PASSWORD:-flowforge}@postgres:5432/${POSTGRES_DB:-flowforge}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
+    healthcheck:
+      # Overrides the backend image's inherited HTTP healthcheck (there's no web
+      # server here) with a real one: ask the worker to answer a broker-routed
+      # ping. This is genuine worker-activity monitoring, not a fake stand-in.
+      test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping --timeout 5 | grep -q OK"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
 
   frontend:
     build:

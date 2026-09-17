@@ -36,6 +36,7 @@ class RequestRead(BaseModel):
     requester_id: uuid.UUID
     title: str
     description: str
+    normalized_description: str | None
     department: str
     status: RequestStatus
     processing_status: ProcessingStatus
