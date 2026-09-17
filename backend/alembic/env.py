@@ -7,8 +7,8 @@ from sqlalchemy import engine_from_config, pool
 from app.core.config import settings
 from app.core.database import Base
 
-# Import all models here so Base.metadata is aware of every table for autogenerate.
-from app.models import user  # noqa: F401
+# Populates Base.metadata with every table for autogenerate.
+from app import models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

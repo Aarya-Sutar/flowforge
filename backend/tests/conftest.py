@@ -15,7 +15,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
+from app.core.security import create_access_token, hash_password
 from app.main import app
+from app.models.user import User, UserRole
 
 TEST_DATABASE_URL = "sqlite://"
 
@@ -48,3 +50,56 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+def _create_user(db_session: Session, *, email: str, role: UserRole) -> User:
+    user = User(name=email.split("@")[0], email=email, password_hash=hash_password("password123"), role=role)
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+
+def _auth_headers(user: User) -> dict[str, str]:
+    token = create_access_token(subject=str(user.id), role=user.role.value)
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture()
+def user_a(db_session: Session) -> User:
+    return _create_user(db_session, email="user-a@example.com", role=UserRole.USER)
+
+
+@pytest.fixture()
+def user_b(db_session: Session) -> User:
+    return _create_user(db_session, email="user-b@example.com", role=UserRole.USER)
+
+
+@pytest.fixture()
+def operator_user(db_session: Session) -> User:
+    return _create_user(db_session, email="operator@example.com", role=UserRole.OPERATOR)
+
+
+@pytest.fixture()
+def admin_user(db_session: Session) -> User:
+    return _create_user(db_session, email="admin@example.com", role=UserRole.ADMIN)
+
+
+@pytest.fixture()
+def user_a_headers(user_a: User) -> dict[str, str]:
+    return _auth_headers(user_a)
+
+
+@pytest.fixture()
+def user_b_headers(user_b: User) -> dict[str, str]:
+    return _auth_headers(user_b)
+
+
+@pytest.fixture()
+def operator_headers(operator_user: User) -> dict[str, str]:
+    return _auth_headers(operator_user)
+
+
+@pytest.fixture()
+def admin_headers(admin_user: User) -> dict[str, str]:
+    return _auth_headers(admin_user)

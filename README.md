@@ -4,7 +4,7 @@ Intelligent business process automation platform. A user submits a business requ
 
 This repository is being built in phases — see [`FLOWFORGE_SPEC.md`](FLOWFORGE_SPEC.md) for the full plan and [`docs/learning/`](docs/learning) for phase-by-phase explanations of how and why it's built this way.
 
-**Status: Phase 1 — Foundations** (repo structure, FastAPI, Next.js, PostgreSQL, Docker Compose, JWT auth, health checks).
+**Status: Phase 2 — Backend + Database Engineering** (relational schema, SQLAlchemy relationships, Alembic migrations, service layer, request CRUD with pagination/filtering/sorting, role-based authorization).
 
 ## Quickstart (Docker Compose)
 
@@ -78,3 +78,4 @@ flowforge/
 - [`FLOWFORGE_SPEC.md`](FLOWFORGE_SPEC.md) — what is being built
 - [`TEACHING_GUIDE.md`](TEACHING_GUIDE.md) — how it's being taught
 - [`docs/learning/PHASE_1_FOUNDATIONS.md`](docs/learning/PHASE_1_FOUNDATIONS.md) — Phase 1 deep dive
+- [`docs/learning/PHASE_2_BACKEND_DATABASE.md`](docs/learning/PHASE_2_BACKEND_DATABASE.md) — Phase 2 deep dive
