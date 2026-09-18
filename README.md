@@ -4,7 +4,7 @@ Intelligent business process automation platform. A user submits a business requ
 
 This repository is being built in phases — see [`FLOWFORGE_SPEC.md`](FLOWFORGE_SPEC.md) for the full plan and [`docs/learning/`](docs/learning) for phase-by-phase explanations of how and why it's built this way.
 
-**Status: Phase 3 — Asynchronous Processing** (Redis + Celery, background request processing, retries, idempotency).
+**Status: Phase 4 — AI Pipeline** (LLM provider abstraction — mock/Ollama/OpenAI-compatible — structured output validation, classification, extraction).
 
 ## Quickstart (Docker Compose)
 
@@ -60,6 +60,7 @@ npm run dev
 flowforge/
 ├── backend/          FastAPI application (Python)
 │   ├── app/
+│   │   ├── ai/        LLM provider abstraction (mock/Ollama/OpenAI-compatible)
 │   │   ├── api/       route handlers + shared dependencies
 │   │   ├── core/      config, database session, security (JWT/hashing)
 │   │   ├── models/    SQLAlchemy ORM models
@@ -87,3 +88,4 @@ flowforge/
 - [`docs/learning/PHASE_1_FOUNDATIONS.md`](docs/learning/PHASE_1_FOUNDATIONS.md) — Phase 1 deep dive
 - [`docs/learning/PHASE_2_BACKEND_DATABASE.md`](docs/learning/PHASE_2_BACKEND_DATABASE.md) — Phase 2 deep dive
 - [`docs/learning/PHASE_3_ASYNC_PROCESSING.md`](docs/learning/PHASE_3_ASYNC_PROCESSING.md) — Phase 3 deep dive
+- [`docs/learning/PHASE_4_AI_PIPELINE.md`](docs/learning/PHASE_4_AI_PIPELINE.md) — Phase 4 deep dive
