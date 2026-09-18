@@ -14,15 +14,16 @@ from app.models.user import User, UserRole
 from app.models.workflow_task import WorkflowTask
 from app.schemas.audit_log import AuditLogRead
 from app.schemas.pagination import Page
-from app.schemas.request import RequestCreate, RequestRead, RequestUpdate
+from app.schemas.request import RequestCreate, RequestDetailRead, RequestRead, RequestUpdate
 from app.schemas.workflow_task import WorkflowTaskRead
 from app.services import audit_service, request_service
 from app.workers.tasks import process_request as process_request_task
 
 router = APIRouter(prefix="/api/requests", tags=["requests"])
 
-# OPERATOR/ADMIN can see every request. Task-based scoping for OPERATOR ("view assigned
-# requests") is added in Phase 5 once workflow_tasks are actually populated with assignees.
+# OPERATOR/ADMIN can see every request. Per-operator task assignment doesn't
+# exist in the data model, so "view assigned requests" (spec) is approximated
+# as "view all requests" for staff — same simplification as workflow_tasks.
 STAFF_ROLES = (UserRole.OPERATOR, UserRole.ADMIN)
 
 
@@ -104,7 +105,7 @@ def list_requests(
     )
 
 
-@router.get("/{request_id}", response_model=RequestRead)
+@router.get("/{request_id}", response_model=RequestDetailRead)
 def get_request(
     request_id: uuid.UUID,
     db: Session = Depends(get_db),
@@ -161,10 +162,18 @@ def retry_request(
 ) -> Request:
     request = _get_request_or_404(db, request_id)
 
-    if request.processing_status != ProcessingStatus.FAILED:
+    # Retryable when the pipeline itself technically failed (Phase 3/4), or
+    # when it succeeded but the outcome needs another pass — a human fixed
+    # something and wants the rule engine to re-evaluate (Phase 5), or the
+    # request was stuck needing information that's since been clarified.
+    retryable_statuses = (RequestStatus.MANUAL_REVIEW, RequestStatus.NEEDS_INFORMATION)
+    if request.processing_status != ProcessingStatus.FAILED and request.status not in retryable_statuses:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Only FAILED requests can be retried (current processing_status: {request.processing_status.value})",
+            detail=(
+                "Only FAILED, MANUAL_REVIEW, or NEEDS_INFORMATION requests can be retried "
+                f"(current status: {request.status.value}, processing_status: {request.processing_status.value})"
+            ),
         )
 
     request.processing_status = ProcessingStatus.QUEUED

@@ -92,6 +92,14 @@ class Request(Base):
     )
 
     requester = relationship("User")
+
+    @property
+    def requester_name(self) -> str:
+        return self.requester.name
+
+    @property
+    def requester_email(self) -> str:
+        return self.requester.email
     extracted_entities = relationship(
         "ExtractedEntity", back_populates="request", cascade="all, delete-orphan"
     )

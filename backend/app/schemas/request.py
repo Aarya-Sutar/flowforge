@@ -53,3 +53,7 @@ class RequestRead(BaseModel):
 
 class RequestDetailRead(RequestRead):
     extracted_entities: list[ExtractedEntityRead] = []
+    # Denormalized for display convenience — avoids the frontend needing a
+    # separate user lookup just to show who filed the request.
+    requester_name: str
+    requester_email: str

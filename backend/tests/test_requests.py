@@ -2,7 +2,7 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from app.models.request import ProcessingStatus, Request
+from app.models.request import ProcessingStatus, Request, RequestStatus
 
 
 def create_request(client: TestClient, headers: dict, title: str = "Cannot access repo", department: str = "Engineering"):
@@ -227,3 +227,32 @@ def test_retry_requeues_a_failed_request(
 
     timeline = client.get(f"/api/requests/{created['id']}/timeline", headers=admin_headers).json()
     assert any(event["event_type"] == "PROCESSING_RETRIED" for event in timeline)
+
+
+def test_retry_allowed_for_manual_review_request(
+    client: TestClient, db_session, user_a_headers: dict, admin_headers: dict
+) -> None:
+    created = create_request(client, user_a_headers).json()
+    request_row = db_session.get(Request, uuid.UUID(created["id"]))
+    request_row.status = RequestStatus.MANUAL_REVIEW
+    request_row.processing_status = ProcessingStatus.COMPLETED  # pipeline succeeded; outcome needs review
+    db_session.commit()
+
+    response = client.post(f"/api/requests/{created['id']}/retry", headers=admin_headers)
+
+    assert response.status_code == 200
+    assert response.json()["processing_status"] == "QUEUED"
+
+
+def test_retry_allowed_for_needs_information_request(
+    client: TestClient, db_session, user_a_headers: dict, admin_headers: dict
+) -> None:
+    created = create_request(client, user_a_headers).json()
+    request_row = db_session.get(Request, uuid.UUID(created["id"]))
+    request_row.status = RequestStatus.NEEDS_INFORMATION
+    request_row.processing_status = ProcessingStatus.COMPLETED
+    db_session.commit()
+
+    response = client.post(f"/api/requests/{created['id']}/retry", headers=admin_headers)
+
+    assert response.status_code == 200

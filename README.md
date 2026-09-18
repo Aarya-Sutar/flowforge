@@ -4,7 +4,7 @@ Intelligent business process automation platform. A user submits a business requ
 
 This repository is being built in phases — see [`FLOWFORGE_SPEC.md`](FLOWFORGE_SPEC.md) for the full plan and [`docs/learning/`](docs/learning) for phase-by-phase explanations of how and why it's built this way.
 
-**Status: Phase 5 — Business Automation** (deterministic rule engine, routing, task creation, seed data).
+**Status: Phase 6 — Frontend Engineering** (Next.js dashboard, auth, requests/tasks/rules UI, real backend data throughout).
 
 ## Quickstart (Docker Compose)
 
@@ -80,10 +80,11 @@ flowforge/
 │   └── tests/         pytest suite
 ├── frontend/          Next.js application (TypeScript)
 │   └── src/
-│       ├── app/        routes (App Router)
-│       ├── components/ reusable UI components
-│       ├── lib/         API client, utilities
-│       └── types/       shared TypeScript types
+│       ├── app/        routes: login, register, dashboard, requests, tasks, rules, settings
+│       ├── components/ auth guard, layout, dashboard charts, request detail, ui primitives
+│       ├── contexts/    AuthContext (JWT session state)
+│       ├── lib/         API client, per-resource service modules, error handling
+│       └── types/       shared TypeScript types matching the backend schemas
 ├── infrastructure/aws/ AWS deployment config (added in Phase 8)
 ├── docs/learning/       phase-by-phase learning documents
 └── docker-compose.yml
@@ -98,3 +99,4 @@ flowforge/
 - [`docs/learning/PHASE_3_ASYNC_PROCESSING.md`](docs/learning/PHASE_3_ASYNC_PROCESSING.md) — Phase 3 deep dive
 - [`docs/learning/PHASE_4_AI_PIPELINE.md`](docs/learning/PHASE_4_AI_PIPELINE.md) — Phase 4 deep dive
 - [`docs/learning/PHASE_5_BUSINESS_AUTOMATION.md`](docs/learning/PHASE_5_BUSINESS_AUTOMATION.md) — Phase 5 deep dive
+- [`docs/learning/PHASE_6_FRONTEND_ENGINEERING.md`](docs/learning/PHASE_6_FRONTEND_ENGINEERING.md) — Phase 6 deep dive
