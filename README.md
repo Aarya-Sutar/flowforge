@@ -4,7 +4,7 @@ Intelligent business process automation platform. A user submits a business requ
 
 This repository is being built in phases — see [`FLOWFORGE_SPEC.md`](FLOWFORGE_SPEC.md) for the full plan and [`docs/learning/`](docs/learning) for phase-by-phase explanations of how and why it's built this way.
 
-**Status: Phase 6 — Frontend Engineering** (Next.js dashboard, auth, requests/tasks/rules UI, real backend data throughout).
+**Status: Phase 7 — Production Engineering** (integration tests, distributed locking, rate limiting, structured logging, security hardening).
 
 ## Quickstart (Docker Compose)
 
@@ -47,11 +47,20 @@ cd backend
 celery -A app.workers.celery_app worker --loglevel=info
 ```
 
-Run tests:
+Run tests (fast unit suite — no external services needed; integration tests under `tests/integration/` auto-skip if the Docker Compose stack isn't reachable and run automatically if it is):
 
 ```bash
 cd backend
 pytest -v
+```
+
+To explicitly run the integration suite against a live stack:
+
+```bash
+docker compose up -d
+docker compose exec backend python -m app.seed   # needed for admin-only integration tests
+cd backend
+pytest tests/integration -v
 ```
 
 **Frontend**
@@ -70,14 +79,15 @@ flowforge/
 │   ├── app/
 │   │   ├── ai/        LLM provider abstraction (mock/Ollama/OpenAI-compatible)
 │   │   ├── api/       route handlers + shared dependencies
-│   │   ├── core/      config, database session, security (JWT/hashing)
+│   │   ├── core/      config, database session, security (JWT/hashing), structured
+│   │   │              logging, request-ID middleware, rate limiting, Redis client
 │   │   ├── models/    SQLAlchemy ORM models
 │   │   ├── schemas/   Pydantic request/response schemas
-│   │   ├── services/  business logic, including the async processing pipeline
+│   │   ├── services/  business logic, async processing pipeline, distributed lock
 │   │   ├── workers/   Celery app + tasks (background request processing)
 │   │   └── rules/     deterministic rule engine (condition/action parsing, evaluation)
 │   ├── alembic/       database migrations
-│   └── tests/         pytest suite
+│   └── tests/         pytest suite (tests/integration/ requires a live Docker Compose stack)
 ├── frontend/          Next.js application (TypeScript)
 │   └── src/
 │       ├── app/        routes: login, register, dashboard, requests, tasks, rules, settings
@@ -100,3 +110,4 @@ flowforge/
 - [`docs/learning/PHASE_4_AI_PIPELINE.md`](docs/learning/PHASE_4_AI_PIPELINE.md) — Phase 4 deep dive
 - [`docs/learning/PHASE_5_BUSINESS_AUTOMATION.md`](docs/learning/PHASE_5_BUSINESS_AUTOMATION.md) — Phase 5 deep dive
 - [`docs/learning/PHASE_6_FRONTEND_ENGINEERING.md`](docs/learning/PHASE_6_FRONTEND_ENGINEERING.md) — Phase 6 deep dive
+- [`docs/learning/PHASE_7_PRODUCTION_ENGINEERING.md`](docs/learning/PHASE_7_PRODUCTION_ENGINEERING.md) — Phase 7 deep dive

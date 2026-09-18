@@ -23,6 +23,7 @@ from app.models.request import ProcessingStatus, Request, RequestPriority, Reque
 from app.models.workflow_task import TaskStatus, WorkflowTask
 from app.rules.engine import evaluate_rules
 from app.services import audit_service
+from app.services.locking import pipeline_lock
 
 # Maps a request's category to the task_type recorded on the WorkflowTask
 # created when routing succeeds — purely descriptive labeling, not a routing
@@ -116,6 +117,18 @@ def mark_manual_review(db: Session, request_id: uuid.UUID, *, reason: str) -> No
 
 
 def run_pipeline(db: Session, request_id: uuid.UUID, ai_provider: AIProvider | None = None) -> None:
+    """Public entry point. Acquires a distributed lock (app/services/locking.py)
+    before doing anything else, so two workers that somehow received the same
+    task can never run the pipeline for the same request concurrently — see
+    locking.py's docstring for why that's a real, not theoretical, risk."""
+    with pipeline_lock(request_id) as acquired:
+        if not acquired:
+            logger.info("processing_pipeline lock_contended request_id=%s", request_id)
+            return
+        _run_pipeline_locked(db, request_id, ai_provider)
+
+
+def _run_pipeline_locked(db: Session, request_id: uuid.UUID, ai_provider: AIProvider | None = None) -> None:
     request = db.get(Request, request_id)
     if request is None:
         # Not a transient failure — retrying won't make a deleted/nonexistent

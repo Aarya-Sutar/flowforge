@@ -16,7 +16,14 @@ RUN npm run build
 FROM base AS runner
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
-    PORT=3000
+    PORT=3000 \
+    # Without this, Next.js's standalone server.js binds to the container's
+    # assigned network IP instead of all interfaces — HEALTHCHECK's
+    # `fetch('http://localhost:3000')` below then gets ECONNREFUSED even
+    # though the app is running fine (confirmed live: the app served every
+    # request correctly throughout Phase 6's browser testing while Docker
+    # reported this container "unhealthy" the whole time).
+    HOSTNAME=0.0.0.0
 
 RUN useradd --create-home nextjs
 COPY --from=builder /app/public ./public

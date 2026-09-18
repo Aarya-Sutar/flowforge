@@ -1,9 +1,10 @@
 """Authentication endpoints: register, login, me."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
+from app.core.rate_limit import limiter
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import User
 from app.schemas.user import Token, UserCreate, UserLogin, UserRead
@@ -12,7 +13,8 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-def register(payload: UserCreate, db: Session = Depends(get_db)) -> User:
+@limiter.limit("10/minute")
+def register(request: Request, payload: UserCreate, db: Session = Depends(get_db)) -> User:
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing is not None:
         raise HTTPException(
@@ -31,7 +33,8 @@ def register(payload: UserCreate, db: Session = Depends(get_db)) -> User:
 
 
 @router.post("/login", response_model=Token)
-def login(payload: UserLogin, db: Session = Depends(get_db)) -> Token:
+@limiter.limit("10/minute")
+def login(request: Request, payload: UserLogin, db: Session = Depends(get_db)) -> Token:
     user = db.query(User).filter(User.email == payload.email).first()
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(

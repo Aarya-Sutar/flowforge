@@ -303,3 +303,25 @@ class TestRouteStage:
 
         task = db_session.query(WorkflowTask).filter(WorkflowTask.request_id == request.id).one()
         assert task.priority == RequestPriority.HIGH
+
+
+def test_run_pipeline_skips_when_lock_is_already_held(db_session: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Proves the wiring, not just the lock in isolation (see
+    test_locking.py): if another worker already holds this request's lock,
+    run_pipeline must do nothing rather than process concurrently."""
+    import fakeredis
+
+    from app.services import locking
+
+    fake = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(locking, "redis_client", fake)
+
+    request = _make_request(db_session)
+    fake.set(f"flowforge:pipeline-lock:{request.id}", "1")  # simulate a concurrent worker
+
+    provider = StubProvider(_stub_result())
+    processing_service.run_pipeline(db_session, request.id, ai_provider=provider)
+
+    db_session.refresh(request)
+    assert request.processing_status == ProcessingStatus.QUEUED  # untouched
+    assert provider.calls == 0

@@ -34,6 +34,19 @@ def _get_request_or_404(db: Session, request_id: uuid.UUID) -> Request:
     return request
 
 
+def _enqueue_processing(request_id: uuid.UUID) -> None:
+    """What actually keeps this from hanging for minutes when the broker is
+    unreachable is the role-based broker_connection_max_retries in
+    app/workers/celery_app.py, not anything here — see that file for the
+    full story (it took several live-tested wrong turns to find, per Phase
+    7's learning doc). Still a real, open gap even with that fix: if this
+    call ultimately fails, the Request row already exists but was never
+    (re-)queued, and nothing currently retries queueing it automatically
+    later.
+    """
+    process_request_task.delay(str(request_id))
+
+
 def _ensure_can_view(request: Request, current_user: User) -> None:
     if current_user.role in STAFF_ROLES:
         return
@@ -61,7 +74,7 @@ def create_request(
     # could pick up the task and query for this request before the row is even
     # visible in the database (the API would return quickly, but the task would
     # immediately fail with "request not found").
-    process_request_task.delay(str(request.id))
+    _enqueue_processing(request.id)
 
     return request
 
@@ -188,7 +201,7 @@ def retry_request(
     db.commit()
     db.refresh(request)
 
-    process_request_task.delay(str(request.id))
+    _enqueue_processing(request.id)
 
     return request
 
