@@ -9,9 +9,15 @@ an even more blunt version of the same warning that applies to real LLM
 self-reported confidence (see app/ai/schemas.py). Never mistake this for a
 real classifier; it exists purely to exercise the pipeline deterministically.
 """
+import re
+
 from app.ai.base import AIProvider
 from app.ai.schemas import AIClassificationResult
 from app.models.request import RequestCategory, RequestPriority
+
+# Matches "$1,200", "$1200.50", "1200 dollars" — deliberately simple, not a
+# general-purpose money parser.
+_AMOUNT_RE = re.compile(r"\$\s?([\d,]+(?:\.\d+)?)|([\d,]+(?:\.\d+)?)\s?dollars")
 
 _CATEGORY_KEYWORDS: list[tuple[RequestCategory, tuple[str, ...]]] = [
     (RequestCategory.ACCESS_REQUEST, ("access", "permission", "login", "password", "vpn", "locked out")),
@@ -41,6 +47,7 @@ class MockAIProvider(AIProvider):
             priority=priority,
             summary=self._summarize(title),
             entities=self._extract_entities(text),
+            amount=self._extract_amount(text),
             confidence=confidence,
         )
 
@@ -54,6 +61,14 @@ class MockAIProvider(AIProvider):
     @staticmethod
     def _summarize(title: str) -> str:
         return title.strip()[:200] or "No summary available"
+
+    @staticmethod
+    def _extract_amount(text: str) -> float | None:
+        match = _AMOUNT_RE.search(text)
+        if not match:
+            return None
+        raw = (match.group(1) or match.group(2)).replace(",", "")
+        return float(raw)
 
     @staticmethod
     def _extract_entities(text: str) -> dict[str, str]:

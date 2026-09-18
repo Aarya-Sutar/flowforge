@@ -80,6 +80,9 @@ class Request(Base):
         Enum(RequestPriority, name="request_priority"), nullable=True
     )
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Extracted by the AI layer when present (e.g. a reimbursement/purchase
+    # amount) — what the FINANCE approval-threshold rule (Phase 5) checks.
+    amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     assigned_team: Mapped[str | None] = mapped_column(String(100), nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
 

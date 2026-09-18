@@ -2,9 +2,9 @@
 wrapper (app/workers/tasks.py) so it can be unit-tested with a plain Session,
 no broker, worker process, or AI provider network access required.
 
-Pipeline stages today: NORMALIZE -> CLASSIFY. Phase 5 inserts deterministic
-validation, business rule evaluation, and routing after CLASSIFY. Each phase
-extends this same function rather than replacing it.
+Pipeline stages: NORMALIZE -> CLASSIFY -> ROUTE. Each phase extended this
+same function rather than replacing it — ROUTE (Phase 5) is where the
+deterministic rule engine turns AI output into an actual business decision.
 """
 import logging
 import re
@@ -19,8 +19,24 @@ from app.ai.exceptions import AIOutputValidationError, AIProviderError
 from app.ai.factory import get_ai_provider
 from app.models.extracted_entity import ExtractedEntity
 from app.models.processing_run import ProcessingRun, ProcessingRunStatus
-from app.models.request import ProcessingStatus, Request, RequestStatus
+from app.models.request import ProcessingStatus, Request, RequestPriority, RequestStatus
+from app.models.workflow_task import TaskStatus, WorkflowTask
+from app.rules.engine import evaluate_rules
 from app.services import audit_service
+
+# Maps a request's category to the task_type recorded on the WorkflowTask
+# created when routing succeeds — purely descriptive labeling, not a routing
+# decision (the rule engine, not this dict, decides *whether* and *where*
+# to route).
+_TASK_TYPE_BY_CATEGORY = {
+    "IT_SUPPORT": "IT_TASK",
+    "HR": "HR_TASK",
+    "FINANCE": "FINANCE_TASK",
+    "PROCUREMENT": "PROCUREMENT_TASK",
+    "CUSTOMER_SERVICE": "CUSTOMER_SERVICE_TASK",
+    "ACCESS_REQUEST": "ACCESS_REVIEW_TASK",
+    "GENERAL": "GENERAL_TASK",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +171,7 @@ def run_pipeline(db: Session, request_id: uuid.UUID, ai_provider: AIProvider | N
         request.priority = result.priority
         request.confidence = result.confidence
         request.summary = result.summary
+        request.amount = result.amount
         for key, value in result.entities.items():
             db.add(ExtractedEntity(request_id=request.id, key=key, value=value))
         db.flush()
@@ -177,13 +194,8 @@ def run_pipeline(db: Session, request_id: uuid.UUID, ai_provider: AIProvider | N
             db, request_id=request.id, event_type="VALIDATION_COMPLETED",
             actor="celery-worker", description="AI output passed structured validation",
         )
-
-        request.processing_status = ProcessingStatus.COMPLETED
-        db.flush()
-        audit_service.record_event(
-            db, request_id=request.id, event_type="PROCESSING_COMPLETED",
-            actor="celery-worker", description="Async processing pipeline completed",
-        )
+        run.status = ProcessingRunStatus.SUCCEEDED
+        run.completed_at = datetime.now(timezone.utc)
         db.commit()
     except OperationalError:
         db.rollback()
@@ -194,3 +206,113 @@ def run_pipeline(db: Session, request_id: uuid.UUID, ai_provider: AIProvider | N
     except Exception as exc:
         _fail_stage(db, request.id, run.id, exc)
         raise
+
+    # --- Stage 3: ROUTE ---
+    run = _start_stage(db, request, "ROUTE")
+
+    try:
+        _route_request(db, request)
+
+        run.status = ProcessingRunStatus.SUCCEEDED
+        run.completed_at = datetime.now(timezone.utc)
+        request.processing_status = ProcessingStatus.COMPLETED
+        db.flush()
+        audit_service.record_event(
+            db, request_id=request.id, event_type="PROCESSING_COMPLETED",
+            actor="celery-worker", description="Async processing pipeline completed",
+        )
+        db.commit()
+    except OperationalError:
+        db.rollback()
+        raise
+    except Exception as exc:
+        _fail_stage(db, request.id, run.id, exc)
+        raise
+
+
+def _route_request(db: Session, request: Request) -> None:
+    """Deterministic validation + business rules + routing + task creation —
+    the step that converts AI output into a safe, explainable business
+    action. The rule engine (app/rules/engine.py), not the AI, makes this
+    decision; every rule it evaluated (triggered or not) and every rule that
+    actually fired is recorded so "why was this request routed here" always
+    has a concrete, queryable answer.
+    """
+    result = evaluate_rules(db, request)
+
+    audit_service.record_event(
+        db, request_id=request.id, event_type="RULE_EVALUATION_COMPLETED",
+        actor="rule-engine",
+        description=f"Evaluated {len(result.evaluations)} rule(s)",
+        metadata={
+            "evaluations": [
+                {"rule_id": e.rule_id, "rule_name": e.rule_name, "condition": e.condition,
+                 "triggered": e.triggered, "action": e.action, "error": e.error}
+                for e in result.evaluations
+            ]
+        },
+    )
+    for evaluation in result.triggered_evaluations:
+        audit_service.record_event(
+            db, request_id=request.id, event_type="RULE_TRIGGERED",
+            actor="rule-engine",
+            description=f'Rule "{evaluation.rule_name}" triggered: {evaluation.action}',
+            metadata={"rule_id": evaluation.rule_id, "rule_name": evaluation.rule_name, "action": evaluation.action},
+        )
+    db.flush()
+
+    if result.terminal_status is not None:
+        request.status = result.terminal_status
+        db.flush()
+        audit_service.record_event(
+            db, request_id=request.id, event_type="REQUEST_ROUTED",
+            actor="rule-engine",
+            description=f"Routed to {result.terminal_status.value} — no team assignment made",
+        )
+        return
+
+    assigned_team = result.assigned_team
+    if assigned_team is None:
+        # No enabled rule matched at all (e.g. every default rule for this
+        # category is disabled). Never leave a request silently unrouted —
+        # the same "never silently lose the request" principle Phase 3
+        # applies to task failures applies here to routing failures.
+        request.status = RequestStatus.MANUAL_REVIEW
+        db.flush()
+        audit_service.record_event(
+            db, request_id=request.id, event_type="MANUAL_REVIEW_REQUIRED",
+            actor="rule-engine", description="No workflow rule matched this request",
+        )
+        return
+
+    request.assigned_team = assigned_team
+    request.status = RequestStatus.PROCESSING
+    db.flush()
+    audit_service.record_event(
+        db, request_id=request.id, event_type="REQUEST_ROUTED",
+        actor="rule-engine", description=f"Routed to {assigned_team}",
+        metadata={"assigned_team": assigned_team},
+    )
+
+    task_type = _TASK_TYPE_BY_CATEGORY.get(
+        request.category.value if request.category else None, "GENERAL_TASK"
+    )
+    if result.require_approval:
+        task_type = "APPROVAL_TASK"
+
+    task_priority = RequestPriority.HIGH if result.mark_urgent else request.priority
+    task = WorkflowTask(
+        request_id=request.id,
+        task_type=task_type,
+        assigned_team=assigned_team,
+        status=TaskStatus.OPEN,
+        priority=task_priority,
+    )
+    db.add(task)
+    db.flush()
+
+    audit_service.record_event(
+        db, request_id=request.id, event_type="TASK_CREATED",
+        actor="rule-engine", description=f"Created {task_type} for {assigned_team}",
+        metadata={"task_id": str(task.id), "task_type": task_type, "assigned_team": assigned_team},
+    )

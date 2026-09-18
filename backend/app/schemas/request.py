@@ -44,6 +44,7 @@ class RequestRead(BaseModel):
     subcategory: str | None
     priority: RequestPriority | None
     confidence: float | None
+    amount: float | None
     assigned_team: str | None
     summary: str | None
     created_at: datetime

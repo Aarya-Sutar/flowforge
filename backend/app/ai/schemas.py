@@ -16,6 +16,10 @@ class AIClassificationResult(BaseModel):
     priority: RequestPriority
     summary: str = Field(min_length=1, max_length=500)
     entities: dict[str, str] = Field(default_factory=dict)
+    # A monetary amount mentioned in the request (e.g. an expense or purchase
+    # total), if any — null when none applies. Phase 5's rule engine checks
+    # this for the FINANCE approval-threshold rule.
+    amount: float | None = Field(default=None, ge=0)
 
     # A heuristic score, NOT a calibrated statistical probability — see the
     # "IMPORTANT AI DESIGN RULE" in FLOWFORGE_SPEC.md and the confidence

@@ -4,7 +4,7 @@ Intelligent business process automation platform. A user submits a business requ
 
 This repository is being built in phases — see [`FLOWFORGE_SPEC.md`](FLOWFORGE_SPEC.md) for the full plan and [`docs/learning/`](docs/learning) for phase-by-phase explanations of how and why it's built this way.
 
-**Status: Phase 4 — AI Pipeline** (LLM provider abstraction — mock/Ollama/OpenAI-compatible — structured output validation, classification, extraction).
+**Status: Phase 5 — Business Automation** (deterministic rule engine, routing, task creation, seed data).
 
 ## Quickstart (Docker Compose)
 
@@ -17,6 +17,14 @@ docker compose up --build
 - Backend API: http://localhost:8000
 - API docs (Swagger): http://localhost:8000/docs
 - Health check: http://localhost:8000/api/health
+
+Optionally seed demo data (users, workflow rules, sample requests spanning every processing outcome):
+
+```bash
+docker compose exec backend python -m app.seed
+```
+
+Seeded logins (password `password123`): `admin@flowforge.dev` (ADMIN), `operator@flowforge.dev` (OPERATOR), `user@flowforge.dev` (USER).
 
 ## Local development without Docker
 
@@ -67,7 +75,7 @@ flowforge/
 │   │   ├── schemas/   Pydantic request/response schemas
 │   │   ├── services/  business logic, including the async processing pipeline
 │   │   ├── workers/   Celery app + tasks (background request processing)
-│   │   └── rules/     deterministic rule engine (added in Phase 5)
+│   │   └── rules/     deterministic rule engine (condition/action parsing, evaluation)
 │   ├── alembic/       database migrations
 │   └── tests/         pytest suite
 ├── frontend/          Next.js application (TypeScript)
@@ -89,3 +97,4 @@ flowforge/
 - [`docs/learning/PHASE_2_BACKEND_DATABASE.md`](docs/learning/PHASE_2_BACKEND_DATABASE.md) — Phase 2 deep dive
 - [`docs/learning/PHASE_3_ASYNC_PROCESSING.md`](docs/learning/PHASE_3_ASYNC_PROCESSING.md) — Phase 3 deep dive
 - [`docs/learning/PHASE_4_AI_PIPELINE.md`](docs/learning/PHASE_4_AI_PIPELINE.md) — Phase 4 deep dive
+- [`docs/learning/PHASE_5_BUSINESS_AUTOMATION.md`](docs/learning/PHASE_5_BUSINESS_AUTOMATION.md) — Phase 5 deep dive

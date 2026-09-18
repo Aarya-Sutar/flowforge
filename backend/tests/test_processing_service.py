@@ -15,6 +15,8 @@ from app.models.extracted_entity import ExtractedEntity
 from app.models.processing_run import ProcessingRun, ProcessingRunStatus
 from app.models.request import ProcessingStatus, Request, RequestPriority, RequestStatus, RequestCategory
 from app.models.user import User, UserRole
+from app.models.workflow_rule import WorkflowRule
+from app.models.workflow_task import WorkflowTask
 from app.services import processing_service
 
 
@@ -65,6 +67,15 @@ def _make_request(db_session: Session, description: str = "  I   cannot   access
     return request
 
 
+def _seed_catch_all_rule(db_session: Session, team: str = "IT Team") -> None:
+    """A rule that always matches (confidence is always >= 0 once CLASSIFY has
+    run), so CLASSIFY-focused tests get a predictable ROUTE outcome (routed,
+    task created) instead of falling into the rule engine's no-match fallback
+    (MANUAL_REVIEW) — that fallback is tested directly in test_rules_engine.py."""
+    db_session.add(WorkflowRule(name="Catch-all", condition="confidence >= 0.0", action=f"assign_team = {team}"))
+    db_session.commit()
+
+
 def test_normalize_text_collapses_whitespace() -> None:
     assert processing_service.normalize_text("  hello   world  \n\tfoo  ") == "hello world foo"
 
@@ -78,6 +89,7 @@ def test_run_pipeline_normalizes_description(db_session: Session) -> None:
 
 
 def test_run_pipeline_persists_ai_classification(db_session: Session) -> None:
+    _seed_catch_all_rule(db_session)
     request = _make_request(db_session)
     processing_service.run_pipeline(db_session, request.id, ai_provider=StubProvider(_stub_result()))
 
@@ -88,9 +100,9 @@ def test_run_pipeline_persists_ai_classification(db_session: Session) -> None:
     assert request.confidence == 0.91
     assert request.summary == "Employee cannot access internal Git repository"
     assert request.processing_status == ProcessingStatus.COMPLETED
-    # Phase 5 (business rules/routing) hasn't run — business status must not
-    # silently advance just because classification succeeded.
-    assert request.status == RequestStatus.PENDING
+    # Routed successfully by the catch-all rule — PROCESSING means "handed off
+    # to a team," not "the underlying issue is resolved" (see Phase 5 docs).
+    assert request.status == RequestStatus.PROCESSING
 
 
 def test_run_pipeline_persists_extracted_entities(db_session: Session) -> None:
@@ -101,16 +113,18 @@ def test_run_pipeline_persists_extracted_entities(db_session: Session) -> None:
     assert entities == {"system": "git repository", "issue": "access denied"}
 
 
-def test_run_pipeline_creates_two_processing_runs(db_session: Session) -> None:
+def test_run_pipeline_creates_three_processing_runs(db_session: Session) -> None:
+    _seed_catch_all_rule(db_session)
     request = _make_request(db_session)
     processing_service.run_pipeline(db_session, request.id, ai_provider=StubProvider(_stub_result()))
 
     runs = db_session.query(ProcessingRun).filter(ProcessingRun.request_id == request.id).order_by(ProcessingRun.started_at).all()
-    assert [r.stage for r in runs] == ["NORMALIZE", "CLASSIFY"]
+    assert [r.stage for r in runs] == ["NORMALIZE", "CLASSIFY", "ROUTE"]
     assert all(r.status == ProcessingRunStatus.SUCCEEDED for r in runs)
 
 
 def test_run_pipeline_writes_expected_audit_events(db_session: Session) -> None:
+    _seed_catch_all_rule(db_session)
     request = _make_request(db_session)
     processing_service.run_pipeline(db_session, request.id, ai_provider=StubProvider(_stub_result()))
 
@@ -124,6 +138,10 @@ def test_run_pipeline_writes_expected_audit_events(db_session: Session) -> None:
         "AI_CLASSIFICATION_COMPLETED",
         "INFORMATION_EXTRACTED",
         "VALIDATION_COMPLETED",
+        "RULE_EVALUATION_COMPLETED",
+        "RULE_TRIGGERED",
+        "REQUEST_ROUTED",
+        "TASK_CREATED",
         "PROCESSING_COMPLETED",
     ]
 
@@ -140,6 +158,7 @@ def test_run_pipeline_skips_information_extracted_when_no_entities(db_session: S
 
 
 def test_run_pipeline_is_idempotent(db_session: Session) -> None:
+    _seed_catch_all_rule(db_session)
     request = _make_request(db_session)
     provider = StubProvider(_stub_result())
 
@@ -147,7 +166,7 @@ def test_run_pipeline_is_idempotent(db_session: Session) -> None:
     processing_service.run_pipeline(db_session, request.id, ai_provider=provider)  # simulates Celery redelivery
 
     runs = db_session.query(ProcessingRun).filter(ProcessingRun.request_id == request.id).count()
-    assert runs == 2
+    assert runs == 3
     assert provider.calls == 1  # second run never even called the provider
 
 
@@ -186,3 +205,101 @@ def test_mark_manual_review_sets_status_and_audit_log(db_session: Session) -> No
         for log in db_session.query(AuditLog).filter(AuditLog.request_id == request.id)
     ]
     assert "MANUAL_REVIEW_REQUIRED" in events
+
+
+class TestRouteStage:
+    """Integration tests for the ROUTE stage specifically — the rule engine
+    itself is unit-tested in test_rules_engine.py; these confirm it's wired
+    into the pipeline correctly end-to-end (task creation, request state)."""
+
+    def test_successful_routing_creates_a_workflow_task(self, db_session: Session) -> None:
+        db_session.add(WorkflowRule(
+            name="Access routing", category="ACCESS_REQUEST",
+            condition="category == ACCESS_REQUEST AND confidence >= 0.80",
+            action="assign_team = IT Security Team",
+        ))
+        db_session.commit()
+        request = _make_request(db_session)
+
+        processing_service.run_pipeline(
+            db_session, request.id,
+            ai_provider=StubProvider(_stub_result(category=RequestCategory.ACCESS_REQUEST, confidence=0.9)),
+        )
+
+        db_session.refresh(request)
+        assert request.status == RequestStatus.PROCESSING
+        assert request.assigned_team == "IT Security Team"
+
+        tasks = db_session.query(WorkflowTask).filter(WorkflowTask.request_id == request.id).all()
+        assert len(tasks) == 1
+        assert tasks[0].task_type == "ACCESS_REVIEW_TASK"
+        assert tasks[0].assigned_team == "IT Security Team"
+
+    def test_low_confidence_routes_to_manual_review_without_creating_task(self, db_session: Session) -> None:
+        db_session.add(WorkflowRule(name="Low confidence", condition="confidence < 0.70", action="status = MANUAL_REVIEW"))
+        db_session.commit()
+        request = _make_request(db_session)
+
+        processing_service.run_pipeline(db_session, request.id, ai_provider=StubProvider(_stub_result(confidence=0.4)))
+
+        db_session.refresh(request)
+        assert request.status == RequestStatus.MANUAL_REVIEW
+        assert request.assigned_team is None
+        assert db_session.query(WorkflowTask).filter(WorkflowTask.request_id == request.id).count() == 0
+
+    def test_missing_finance_amount_routes_to_needs_information(self, db_session: Session) -> None:
+        db_session.add(WorkflowRule(
+            name="Missing amount", category="FINANCE", condition="amount IS NULL", action="status = NEEDS_INFORMATION",
+        ))
+        db_session.commit()
+        request = _make_request(db_session)
+
+        processing_service.run_pipeline(
+            db_session, request.id,
+            ai_provider=StubProvider(_stub_result(category=RequestCategory.FINANCE, amount=None)),
+        )
+
+        db_session.refresh(request)
+        assert request.status == RequestStatus.NEEDS_INFORMATION
+
+    def test_finance_over_threshold_creates_approval_task(self, db_session: Session) -> None:
+        db_session.add(WorkflowRule(name="Finance routing", category="FINANCE", condition="category == FINANCE", action="assign_team = Finance Team"))
+        db_session.add(WorkflowRule(
+            name="Finance approval threshold", category="FINANCE",
+            condition="category == FINANCE AND amount > 100000", action="require_approval = true",
+        ))
+        db_session.commit()
+        request = _make_request(db_session)
+
+        processing_service.run_pipeline(
+            db_session, request.id,
+            ai_provider=StubProvider(_stub_result(category=RequestCategory.FINANCE, amount=150000.0)),
+        )
+
+        tasks = db_session.query(WorkflowTask).filter(WorkflowTask.request_id == request.id).all()
+        assert len(tasks) == 1
+        assert tasks[0].task_type == "APPROVAL_TASK"
+
+    def test_no_matching_rule_falls_back_to_manual_review(self, db_session: Session) -> None:
+        # No workflow_rules seeded at all in this test's db_session.
+        request = _make_request(db_session)
+
+        processing_service.run_pipeline(db_session, request.id, ai_provider=StubProvider(_stub_result()))
+
+        db_session.refresh(request)
+        assert request.status == RequestStatus.MANUAL_REVIEW
+        assert request.assigned_team is None
+
+    def test_mark_urgent_action_sets_task_priority_high(self, db_session: Session) -> None:
+        db_session.add(WorkflowRule(name="Routing", condition="confidence >= 0.0", action="assign_team = IT Team"))
+        db_session.add(WorkflowRule(name="Urgent", condition="priority == HIGH", action="mark_urgent = true"))
+        db_session.commit()
+        request = _make_request(db_session)
+
+        processing_service.run_pipeline(
+            db_session, request.id,
+            ai_provider=StubProvider(_stub_result(priority=RequestPriority.HIGH)),
+        )
+
+        task = db_session.query(WorkflowTask).filter(WorkflowTask.request_id == request.id).one()
+        assert task.priority == RequestPriority.HIGH

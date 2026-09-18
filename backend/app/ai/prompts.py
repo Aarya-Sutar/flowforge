@@ -18,6 +18,8 @@ The JSON object must have exactly these fields:
 - "summary": a one-sentence summary of the request, under 200 characters
 - "entities": an object of short key/value pairs extracted from the text \
 (e.g. {{"system": "internal git repository"}}). Use an empty object {{}} if none apply.
+- "amount": a monetary amount mentioned in the request (e.g. an expense or \
+purchase total), as a plain number with no currency symbol, or null if none is mentioned.
 - "confidence": your confidence in this classification, a number from 0.0 to 1.0
 
 Only use information present in the request. Do not invent details that \

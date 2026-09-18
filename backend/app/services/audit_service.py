@@ -1,5 +1,6 @@
 """Writes audit trail entries. Every important state transition goes through here."""
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -21,6 +22,14 @@ def record_event(
         actor=actor,
         description=description,
         event_metadata=metadata,
+        # Set explicitly rather than relying on the column's server_default
+        # (Postgres func.now()): now() returns the *transaction's* start
+        # time, identical for every statement in that transaction — several
+        # events written within one pipeline stage's commit would otherwise
+        # all get the exact same timestamp, making their relative order in
+        # the timeline undefined. A Python-side timestamp, taken at the
+        # moment each event is actually recorded, avoids that.
+        created_at=datetime.now(timezone.utc),
     )
     db.add(entry)
     db.flush()
