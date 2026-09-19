@@ -53,6 +53,19 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Generate Next.js route types
+        # Route helper types like LayoutProps (used in src/app/layout.tsx)
+        # are generated, not hand-written — normally produced as a side
+        # effect of `next dev`/`next build`. On a genuinely fresh checkout
+        # (no .next/ directory yet) they don't exist until something
+        # generates them, so a standalone type-check has to ask for them
+        # explicitly first. Found by CI itself failing on the very first
+        # real run of this workflow — a fresh checkout is exactly what a
+        # local dev machine, with months of accumulated .next/ output,
+        # doesn't actually test. See docs/learning/PHASE_9_CICD.md.
+        working-directory: frontend
+        run: npx next typegen
+
       - name: Type-check
         working-directory: frontend
         run: npx tsc --noEmit
