@@ -1,0 +1,23 @@
+# Kept intentionally small: a handful of rule categories that catch real
+# bugs and real dead code, not a large opinionated style ruleset the rest
+# of this codebase wasn't written against from day one.
+line-length = 120
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes — unused imports/variables, undefined names, real bugs
+    "I",   # isort — import ordering
+    "UP",  # pyupgrade — outdated syntax for the Python version actually in use
+    "B",   # flake8-bugbear — common real-world bug patterns
+]
+ignore = [
+    "E501", # line length — already governed by line-length above; this rule duplicates it noisily for long comments/strings
+    "B008", # FastAPI's Depends()/Query() as argument defaults is the framework's own idiomatic dependency-injection pattern, not the mutable-default-argument bug this rule normally catches — a well-documented, standard exception for FastAPI codebases
+]
+
+[lint.per-file-ignores]
+# Alembic migration files follow Alembic's own generated structure/naming
+# conventions, not this project's usual style — linting them the same way
+# as application code would just be noise.
+"alembic/versions/*.py" = ["E", "I"]

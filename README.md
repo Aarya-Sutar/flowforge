@@ -4,7 +4,9 @@ Intelligent business process automation platform. A user submits a business requ
 
 This repository is being built in phases — see [`FLOWFORGE_SPEC.md`](FLOWFORGE_SPEC.md) for the full plan and [`docs/learning/`](docs/learning) for phase-by-phase explanations of how and why it's built this way.
 
-**Status: Phase 8 — Cloud and AWS** (Terraform infrastructure for ECS/Fargate + RDS + ElastiCache; validated, **not deployed to a live AWS account** — no credentials available in this environment. See the learning doc for exactly what that means).
+**Status: Phase 9 — CI/CD and Engineering Workflow** (GitHub Actions: CI runs on every push/PR; deploy is wired for real via OIDC but gated off, since no AWS account is connected).
+
+[![CI](https://github.com/Aarya-Sutar/flowforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Aarya-Sutar/flowforge/actions/workflows/ci.yml)
 
 ## Quickstart (Docker Compose)
 

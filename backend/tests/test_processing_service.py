@@ -13,7 +13,7 @@ from app.core.security import hash_password
 from app.models.audit_log import AuditLog
 from app.models.extracted_entity import ExtractedEntity
 from app.models.processing_run import ProcessingRun, ProcessingRunStatus
-from app.models.request import ProcessingStatus, Request, RequestPriority, RequestStatus, RequestCategory
+from app.models.request import ProcessingStatus, Request, RequestCategory, RequestPriority, RequestStatus
 from app.models.user import User, UserRole
 from app.models.workflow_rule import WorkflowRule
 from app.models.workflow_task import WorkflowTask

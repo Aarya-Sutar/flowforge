@@ -3,7 +3,8 @@ currently sees every task rather than only "assigned" ones (no per-operator
 assignment exists in the data model yet, same simplification as requests)."""
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import status as http_status
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_roles

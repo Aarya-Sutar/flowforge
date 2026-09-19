@@ -1,0 +1,111 @@
+name: Deploy
+
+# Triggers only after the CI workflow finishes running on main — this is
+# what enforces "tests must pass before deploy," per the spec's pipeline
+# diagram, using workflow_run rather than duplicating the test steps here.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  id-token: write # required for the OIDC AssumeRoleWithWebIdentity call below
+  contents: read
+
+jobs:
+  deploy:
+    name: Build, push, and deploy to ECS
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      vars.AWS_DEPLOY_ENABLED == 'true'
+    # AWS_DEPLOY_ENABLED is a repository VARIABLE (Settings -> Secrets and
+    # variables -> Actions -> Variables), not a secret — deliberately, so it
+    # can be read here in this `if:` condition. It defaults to unset, which
+    # means this job is SKIPPED (shown gray in the Actions UI), not failed
+    # (red) — this repository has no AWS account connected, so the honest
+    # state is "correctly configured, not yet turned on," not a red X.
+    # See docs/learning/PHASE_9_CICD.md for exactly what enabling this for
+    # real requires.
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Log in to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend/celery-worker image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          REPO: flowforge-backend
+          TAG: ${{ github.sha }}
+        run: |
+          docker build -t "$REGISTRY/$REPO:$TAG" -t "$REGISTRY/$REPO:latest" ./backend
+          docker push "$REGISTRY/$REPO:$TAG"
+          docker push "$REGISTRY/$REPO:latest"
+
+      - name: Build and push frontend image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          REPO: flowforge-frontend
+          TAG: ${{ github.sha }}
+          ALB_URL: ${{ vars.ALB_URL }}
+        # NEXT_PUBLIC_API_URL must be baked in at build time (Phase 6) — ALB_URL
+        # is another repo variable, set once the ALB exists (see the Phase 8
+        # runbook's chicken-and-egg build order).
+        run: |
+          docker build --build-arg NEXT_PUBLIC_API_URL="$ALB_URL" -t "$REGISTRY/$REPO:$TAG" -t "$REGISTRY/$REPO:latest" ./frontend
+          docker push "$REGISTRY/$REPO:$TAG"
+          docker push "$REGISTRY/$REPO:latest"
+
+      - name: Deploy backend service
+        run: |
+          aws ecs update-service \
+            --cluster flowforge-cluster \
+            --service flowforge-backend \
+            --force-new-deployment
+
+      - name: Deploy celery-worker service
+        run: |
+          aws ecs update-service \
+            --cluster flowforge-cluster \
+            --service flowforge-celery-worker \
+            --force-new-deployment
+
+      - name: Deploy frontend service
+        run: |
+          aws ecs update-service \
+            --cluster flowforge-cluster \
+            --service flowforge-frontend \
+            --force-new-deployment
+
+      - name: Wait for backend service to stabilize
+        run: |
+          aws ecs wait services-stable \
+            --cluster flowforge-cluster \
+            --services flowforge-backend flowforge-frontend
+
+      - name: Health check
+        env:
+          ALB_URL: ${{ vars.ALB_URL }}
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf "$ALB_URL/api/health"; then
+              echo ""
+              echo "Deployment healthy."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Deployed service never became healthy — see the rollback procedure in docs/learning/PHASE_9_CICD.md" >&2
+          exit 1
