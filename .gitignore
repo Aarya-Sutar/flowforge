@@ -18,6 +18,13 @@ frontend/.next/
 frontend/next-env.d.ts
 frontend/tsconfig.tsbuildinfo
 
+# Terraform
+infrastructure/aws/terraform/.terraform/
+infrastructure/aws/terraform/*.tfstate
+infrastructure/aws/terraform/*.tfstate.*
+infrastructure/aws/terraform/*.tfvars
+infrastructure/aws/terraform/crash.log
+
 # OS
 .DS_Store
 Thumbs.db

@@ -4,7 +4,7 @@ Intelligent business process automation platform. A user submits a business requ
 
 This repository is being built in phases — see [`FLOWFORGE_SPEC.md`](FLOWFORGE_SPEC.md) for the full plan and [`docs/learning/`](docs/learning) for phase-by-phase explanations of how and why it's built this way.
 
-**Status: Phase 7 — Production Engineering** (integration tests, distributed locking, rate limiting, structured logging, security hardening).
+**Status: Phase 8 — Cloud and AWS** (Terraform infrastructure for ECS/Fargate + RDS + ElastiCache; validated, **not deployed to a live AWS account** — no credentials available in this environment. See the learning doc for exactly what that means).
 
 ## Quickstart (Docker Compose)
 
@@ -95,7 +95,7 @@ flowforge/
 │       ├── contexts/    AuthContext (JWT session state)
 │       ├── lib/         API client, per-resource service modules, error handling
 │       └── types/       shared TypeScript types matching the backend schemas
-├── infrastructure/aws/ AWS deployment config (added in Phase 8)
+├── infrastructure/aws/ Terraform for ECS/Fargate + RDS + ElastiCache (validated, not deployed — see Phase 8 docs)
 ├── docs/learning/       phase-by-phase learning documents
 └── docker-compose.yml
 ```
@@ -111,3 +111,4 @@ flowforge/
 - [`docs/learning/PHASE_5_BUSINESS_AUTOMATION.md`](docs/learning/PHASE_5_BUSINESS_AUTOMATION.md) — Phase 5 deep dive
 - [`docs/learning/PHASE_6_FRONTEND_ENGINEERING.md`](docs/learning/PHASE_6_FRONTEND_ENGINEERING.md) — Phase 6 deep dive
 - [`docs/learning/PHASE_7_PRODUCTION_ENGINEERING.md`](docs/learning/PHASE_7_PRODUCTION_ENGINEERING.md) — Phase 7 deep dive
+- [`docs/learning/PHASE_8_CLOUD_AWS.md`](docs/learning/PHASE_8_CLOUD_AWS.md) — Phase 8 deep dive (infrastructure code + deployment runbook; not deployed)

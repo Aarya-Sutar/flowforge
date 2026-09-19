@@ -1,0 +1,17 @@
+# Copy to terraform.tfvars and fill in real values. terraform.tfvars is
+# gitignored — never commit it, the same rule as the project's .env file.
+#
+# backend_image and frontend_image are left empty until images actually
+# exist in ECR (see the deployment runbook in
+# docs/learning/PHASE_8_CLOUD_AWS.md for the build-and-push steps and why
+# the frontend image specifically must be built AFTER the ALB exists).
+
+aws_region = "us-east-1"
+
+# backend_image  = "123456789012.dkr.ecr.us-east-1.amazonaws.com/flowforge-backend:latest"
+# frontend_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/flowforge-frontend:latest"
+
+ai_provider = "mock" # switch to "openai" once openai_api_key is set below
+# openai_api_key = "sk-..."
+
+cors_origins = "[\"http://your-alb-dns-name-or-domain\"]"
