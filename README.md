@@ -4,7 +4,7 @@ Intelligent business process automation platform. A user submits a business requ
 
 This repository is being built in phases — see [`FLOWFORGE_SPEC.md`](FLOWFORGE_SPEC.md) for the full plan and [`docs/learning/`](docs/learning) for phase-by-phase explanations of how and why it's built this way.
 
-**Status: Phase 9 — CI/CD and Engineering Workflow** (GitHub Actions: CI runs on every push/PR; deploy is wired for real via OIDC but gated off, since no AWS account is connected).
+**Status: Phase 10 — Complete System Integration** (five end-to-end scenarios traced through the real, already-built system — see [`docs/learning/PHASE_10_SYSTEM_INTEGRATION.md`](docs/learning/PHASE_10_SYSTEM_INTEGRATION.md)).
 
 [![CI](https://github.com/Aarya-Sutar/flowforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Aarya-Sutar/flowforge/actions/workflows/ci.yml)
 
@@ -115,3 +115,4 @@ flowforge/
 - [`docs/learning/PHASE_7_PRODUCTION_ENGINEERING.md`](docs/learning/PHASE_7_PRODUCTION_ENGINEERING.md) — Phase 7 deep dive
 - [`docs/learning/PHASE_8_CLOUD_AWS.md`](docs/learning/PHASE_8_CLOUD_AWS.md) — Phase 8 deep dive (infrastructure code + deployment runbook; not deployed)
 - [`docs/learning/PHASE_9_CICD.md`](docs/learning/PHASE_9_CICD.md) — Phase 9 deep dive (includes the real CI run that failed, and the real fix that made it pass)
+- [`docs/learning/PHASE_10_SYSTEM_INTEGRATION.md`](docs/learning/PHASE_10_SYSTEM_INTEGRATION.md) — Phase 10 deep dive (five complete scenarios traced end-to-end through the real system)
