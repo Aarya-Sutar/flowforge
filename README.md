@@ -114,3 +114,4 @@ flowforge/
 - [`docs/learning/PHASE_6_FRONTEND_ENGINEERING.md`](docs/learning/PHASE_6_FRONTEND_ENGINEERING.md) — Phase 6 deep dive
 - [`docs/learning/PHASE_7_PRODUCTION_ENGINEERING.md`](docs/learning/PHASE_7_PRODUCTION_ENGINEERING.md) — Phase 7 deep dive
 - [`docs/learning/PHASE_8_CLOUD_AWS.md`](docs/learning/PHASE_8_CLOUD_AWS.md) — Phase 8 deep dive (infrastructure code + deployment runbook; not deployed)
+- [`docs/learning/PHASE_9_CICD.md`](docs/learning/PHASE_9_CICD.md) — Phase 9 deep dive (includes the real CI run that failed, and the real fix that made it pass)
