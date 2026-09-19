@@ -116,3 +116,4 @@ flowforge/
 - [`docs/learning/PHASE_8_CLOUD_AWS.md`](docs/learning/PHASE_8_CLOUD_AWS.md) — Phase 8 deep dive (infrastructure code + deployment runbook; not deployed)
 - [`docs/learning/PHASE_9_CICD.md`](docs/learning/PHASE_9_CICD.md) — Phase 9 deep dive (includes the real CI run that failed, and the real fix that made it pass)
 - [`docs/learning/PHASE_10_SYSTEM_INTEGRATION.md`](docs/learning/PHASE_10_SYSTEM_INTEGRATION.md) — Phase 10 deep dive (five complete scenarios traced end-to-end through the real system)
+- [`docs/learning/FINAL_ARCHITECTURE_REVIEW.md`](docs/learning/FINAL_ARCHITECTURE_REVIEW.md) — whiteboard-style walkthrough of the three core architecture flows, interview-prep style
