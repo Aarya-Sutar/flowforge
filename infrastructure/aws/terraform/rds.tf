@@ -24,7 +24,11 @@ resource "aws_db_instance" "main" {
 
   multi_az = false # single-AZ: real production would set this true for automatic failover, at roughly double the cost — a demo-scale trade-off, not an oversight
 
-  backup_retention_period = 7
+  # 1, not 7: AWS Free Tier-restricted accounts cap backup_retention_period
+  # below 7 (discovered live, on a real account, deploying this exact
+  # config — see docs/learning/PHASE_8_CLOUD_AWS.md's runbook notes). Still
+  # enables daily backups, just not a 7-day window.
+  backup_retention_period = 1
   backup_window           = "03:00-04:00"
   maintenance_window      = "sun:04:30-sun:05:30"
 
